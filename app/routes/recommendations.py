@@ -5,89 +5,65 @@ from ..services.steam_client import SteamClient
 from math import log10
 
 bp = Blueprint("recommendations", __name__)
-
+#          
 @bp.post("/seed")
+#user request to seed some appids into the database for development purposes
 def seed():
-    """
-    Seed a few appids into the DB for dev:
-    curl -XPOST :8000/api/seed -H 'Content-Type: application/json' \
-         -d '{"appids":[570,440,620]}'
-    """
+
     data = request.get_json(silent=True) or {}
+    #grab JSON payload from user request, if none present use empty dict
+    #silent true means if JSON is malformed just return None rather than error
     appids = data.get("appids") or [570, 440, 620]  # Dota2/TF2/Portal2
     client = SteamClient(cache_ttl=current_app.config.get("STEAM_CACHE_TTL_SECONDS", 3600))
-
+    #build client from config then grab ttl from config, default to 3600 if not present
     for raw in appids:
         appid = int(raw)
         details = client.app_details(appid).get(str(appid), {}).get("data", {}) or {}
         summary = client.app_reviews_summary(appid).get("query_summary", {}) or {}
-
-        g = Game.query.get(appid) or Game(appid=appid, name=details.get("name", f"App {appid}"))
-        g.positive = summary.get("total_positive", 0)
-        g.negative = summary.get("total_negative", 0)
-        #owners_estimate often unavailable; leave None (we'll improve later)
-        db.session.add(g)
-    db.session.commit()
-    return jsonify({"seeded": len(appids)}), 201
-
-"""Want to test for a lot fo seeds."""
-@bp.post("/seed_range")
-def seed_range():
-    """
-    Body JSON (all optional):
-    {"start": 1000, "end": 1500, "extra": [570,440,620]}
-    """
-    payload = request.get_json(silent=True) or {}
-    start = int(payload.get("start", 1000))
-    end   = int(payload.get("end",   1500))
-    extra = payload.get("extra") or [570, 440, 620]
-    appids = list(range(start, end)) + extra
-
-    client = SteamClient(cache_ttl=current_app.config.get("STEAM_CACHE_TTL_SECONDS", 3600))
-    seeded = 0
-    for raw in appids:
-        appid = int(raw)
-        details = client.app_details(appid).get(str(appid), {}).get("data", {}) or {}
-        summary = client.app_reviews_summary(appid).get("query_summary", {}) or {}
-
+        #create a new Game instance or update existing
         game = Game.query.get(appid) or Game(appid=appid, name=details.get("name", f"App {appid}"))
         game.positive = summary.get("total_positive", 0)
         game.negative = summary.get("total_negative", 0)
+        #owners_estimate often unavailable; leave None (we'll improve later)
         db.session.add(game)
-        seeded += 1
     db.session.commit()
-    return jsonify({"seeded": seeded, "range": [start, end]}), 201
+    return jsonify({"seeded": len(appids)}), 201
 
-@bp.route("/recommendations", methods=["GET", "POST"])
+""" Big picture: when user submits a POST request to /seed with a list of appids,
+    our server will use the SteamClient to fetch details and review summaries for each appid.
+    It will then create or update Game records in the database with the fetched data,
+    and finally commit the changes to the database. 
+"""
+
+@bp.get("/recommendations")
 def recommendations():
-    #built to allow both get and post methods, now we can test and dev debug easier with post method
-    if request.method == "GET":
-        payload = {
-            "limit": request.args.get("limit"),
-            "min_reviews": request.args.get("min_reviews"),
-            "q": request.args.get("q"),
-        }
-    elif request.method == "POST": 
-        payload = request.get_json(silent=True) or {}
+    """
+    Return top N 'hidden gems' using a simple score:
+    score = pos_ratio / (1 + log10(popularity_proxy))
+    """
+    limit = int(request.args.get("limit", 10))
+    #default to top 10 if not specified, otherwise grab from user request
+    #same process for all below, uses request args to grab query parameters
+    min_reviews = int(request.args.get("min_reviews", 50))
+    name_query = request.args.get("q")  # optional name filter
 
-    # normalize inputs with defaults
-    limit = max(1, min(int(payload.get("limit") or 10), 100))
-    min_reviews = int(payload.get("min_reviews") or 50)
-    q = ((payload.get("q") or "")).strip()
-
-    #filter and score
     candidates = Game.query.all()
-    if q:
-        candidates = [game for game in candidates if q.lower() in game.name.lower()]
+    #get all games from database
+    if name_query:
+        candidates = [game for game in candidates if name_query.lower() in game.name.lower()]
     candidates = [game for game in candidates if game.total_reviews >= min_reviews]
-
-    from math import log10
+    #filter candidates by name query and minimum reviews
     def score(game: Game) -> float:
-        if game.total_reviews == 0: return 0.0
-        owners = game.owners_estimate or game.total_reviews
-        return game.pos_ratio / (1.0 + log10(max(owners, 1)))
+        if game.total_reviews == 0:
+            return 0.0
+        ratio = game.pos_ratio
+        owners = game.owners_estimate or max(game.total_reviews, 1)  # crude popularity proxy
+        return ratio / (1.0 + log10(max(owners, 1)))
+        #calculate score based on positive review ratio and popularity proxy
 
     ranked = sorted(candidates, key=score, reverse=True)[:limit]
+
+    #format response through jsonify after sorting and limiting
     return jsonify([
         {
             "appid": game.appid,
