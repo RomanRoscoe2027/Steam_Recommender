@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-load_dotenv()  # loads .env into environment variables (key)
+load_dotenv()  #containing my key
 from flask import Flask, jsonify 
 from .config import get_config
 from .extensions import db
