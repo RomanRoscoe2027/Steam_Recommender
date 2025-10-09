@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()  # loads .env into environment variables (key)
 from flask import Flask, jsonify 
 from .config import get_config
 from .extensions import db
@@ -7,6 +9,8 @@ from .routes.recommendations import bp as recs_bp
 
 from .models.game import Game 
 #initially wasn't being imported, needs db/metadata
+#import after routes to prevent circular imports
+
 def create_app(env: str = "dev") -> Flask:
     app = Flask(__name__)  #Create the WSGI app object
     app.config.from_object(get_config(env))
