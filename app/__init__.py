@@ -7,7 +7,7 @@ from .extensions import db
 from .routes.recommendations import bp as recs_bp
 # Initialize flask application, allows app/ to be a package imported
 
-from .models.game import Game 
+from .models.appdetails import App
 #initially wasn't being imported, needs db/metadata
 #import after routes to prevent circular imports
 

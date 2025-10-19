@@ -1,19 +1,29 @@
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import Index, ForeignKey, Integer, String, Boolean, BigInteger, Text
-
-db = SQLAlchemy()
+from ..extensions import db
 
 class App(db.Model):
     __tablename__ = "apps"
-    steam_appid = db.Column(Integer, primary_key=True)
+    appid = db.Column(Integer, primary_key=True)
     name = db.Column(String, index=True)
     type = db.Column(String)
     is_free = db.Column(Boolean, default=False)
     metacritic_score = db.Column(Integer)
     recommendations_total = db.Column(Integer)
+    
     #key for popularity reccommending at some point
+    
     release_date_raw = db.Column(String)
+    last_fetched_ts = db.Column(BigInteger)
+    #don't wanna hammer the API, impoetant for cache
+
+    #moved over from old GAMES table:
+    positive      = db.Column(Integer, default=0)
+    negative      = db.Column(Integer, default=0)
+    players       = db.Column(Integer)    # nullable
+    last_updated  = db.Column(db.DateTime, default=datetime.utcnow)
+    
     last_fetched_ts = db.Column(BigInteger)
     #don't wanna hammer the API, impoetant for cache
 
@@ -21,13 +31,23 @@ class App(db.Model):
                              cascade="all, delete-orphan")
     categories = db.relationship("AppCategory", back_populates="app",
                                  cascade="all, delete-orphan")
+    
     """ The above two are vital for creating our recceomendations, JSON data
     will likely return some list of categories and genres, cascades allow for auto deletion of childs
     in regards to deleting app, think of as like smart ptr in c++. Important to understand that this
     is for convience, as could all essentially be done through regular sql querying, just have to
     be more precise and its far more annoying, sql alchemy helps manage relationships, instead of 
     total manual control."""
+    
+    #refactored from games
+    @property
+    def total_reviews(self) -> int:
+        return (self.positive or 0) + (self.negative or 0)
 
+    @property
+    def pos_ratio(self) -> float:
+        t = self.total_reviews
+        return (self.positive / t) if t else 0.0
 class AppGenre(db.Model):
     """Genre table that connects to parent table app, through foreign key
     steam_appid. Index named idx_genre created just to sift through all genres."""

@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request, current_app
 from ..extensions import db
-from ..models.game import Game
+from ..models.appdetails import App
 from ..services.steam_client import SteamClient
 from math import log10
 
@@ -21,10 +21,11 @@ def seed():
         details = client.app_details(appid).get(str(appid), {}).get("data", {}) or {}
         summary = client.app_reviews_summary(appid).get("query_summary", {}) or {}
         #create a new Game instance or update existing
-        game = Game.query.get(appid) or Game(appid=appid, name=details.get("name", f"App {appid}"))
+        
+        game = App.query.get(appid) or App(steam_appid=appid, name=details.get("name", f"App {appid}"))
         game.positive = summary.get("total_positive", 0)
         game.negative = summary.get("total_negative", 0)
-        #owners_estimate often unavailable; leave None (we'll improve later)
+
         db.session.add(game)
     db.session.commit()
     return jsonify({"seeded": len(appids)}), 201
@@ -47,17 +48,37 @@ def recommendations():
     min_reviews = int(request.args.get("min_reviews", 50))
     name_query = request.args.get("q")  # optional name filter
 
-    candidates = Game.query.all()
+    candidates = App.query.all() 
     #get all games from database
     if name_query:
-        candidates = [game for game in candidates if name_query.lower() in game.name.lower()]
-    candidates = [game for game in candidates if game.total_reviews >= min_reviews]
+        candidates = [game for game in candidates if name_query.lower() in (game.name or "").lower()]
+    candidates = [game for game in candidates if ((game.positive or 0) + (game.negative or 0)) >= min_reviews]
     #filter candidates by name query and minimum reviews
-    def score(game: Game) -> float:
-        if game.total_reviews == 0:
+
+    def total_reviews(game: App) -> int:
+        #return total reviews as int
+        return int(game.positive or 0) + int(game.negative or 0)
+
+    def pos_ratio(game: App) -> float:
+        #return positive review ratio as float
+        t = total_reviews(game)
+        return (float(game.positive) / t) if t else 0.0
+
+    def popularity_proxy(game: App) -> int:
+        """
+        Replacement for owners_estimate (often unavailable). Prefer storefront
+        recommendations_total if cached on App; otherwise fall back to total_reviews.
+        """
+        val = getattr(game, "recommendations_total", None)
+        if val is None:
+            val = total_reviews(game)
+        return max(int(val or 0), 1)
+
+    def score(game: App) -> float:
+        if total_reviews(game) == 0:
             return 0.0
-        ratio = game.pos_ratio
-        owners = game.owners_estimate or max(game.total_reviews, 1)  #crude popularity
+        ratio = pos_ratio(game)
+        owners = popularity_proxy(game)  #crude popularity
         return ratio / (1.0 + log10(max(owners, 1)))
         #calculate score based on positive review ratio and popularity
 
@@ -66,10 +87,10 @@ def recommendations():
     #format response through jsonify after sorting and limiting
     return jsonify([
         {
-            "appid": game.appid,
-            "name": game.name,
-            "pos_ratio": round(game.pos_ratio, 4),
-            "total_reviews": game.total_reviews,
-            "owners_estimate": game.owners_estimate,
-        } for game in ranked
+            "appid": app.steam_appid,  
+            "name": app.name,
+            "pos_ratio": round(pos_ratio(app), 4),
+            "total_reviews": total_reviews(app),
+            "owners_estimate": popularity_proxy(app),  # keep key name if you want to avoid breaking clients
+        } for app in ranked
     ])
