@@ -5,7 +5,7 @@ from ..services.steam_client import SteamClient
 from math import log10
 
 bp = Blueprint("recommendations", __name__)
-#          
+         
 @bp.post("/seed")
 #user request to seed some appids into the database for development purposes
 def seed():
@@ -57,9 +57,9 @@ def recommendations():
         if game.total_reviews == 0:
             return 0.0
         ratio = game.pos_ratio
-        owners = game.owners_estimate or max(game.total_reviews, 1)  # crude popularity proxy
+        owners = game.owners_estimate or max(game.total_reviews, 1)  #crude popularity
         return ratio / (1.0 + log10(max(owners, 1)))
-        #calculate score based on positive review ratio and popularity proxy
+        #calculate score based on positive review ratio and popularity
 
     ranked = sorted(candidates, key=score, reverse=True)[:limit]
 

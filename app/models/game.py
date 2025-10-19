@@ -20,4 +20,4 @@ class Game(db.Model):
     def pos_ratio(self) -> float:
         total_reviews = self.total_reviews
         return (self.positive / total_reviews) if total_reviews else 0.0
-        #return positive review ratio as float    
+        #return positive review ratio as float    '
