@@ -22,7 +22,7 @@ def seed():
         summary = client.app_reviews_summary(appid).get("query_summary", {}) or {}
         #create a new Game instance or update existing
         
-        game = App.query.get(appid) or App(steam_appid=appid, name=details.get("name", f"App {appid}"))
+        game = App.query.get(appid) or App(appid=appid, name=details.get("name", f"App {appid}"))
         game.positive = summary.get("total_positive", 0)
         game.negative = summary.get("total_negative", 0)
 
@@ -87,7 +87,7 @@ def recommendations():
     #format response through jsonify after sorting and limiting
     return jsonify([
         {
-            "appid": app.steam_appid,  
+            "appid": app.appid,  
             "name": app.name,
             "pos_ratio": round(pos_ratio(app), 4),
             "total_reviews": total_reviews(app),

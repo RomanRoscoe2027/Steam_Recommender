@@ -50,18 +50,18 @@ class App(db.Model):
         return (self.positive / t) if t else 0.0
 class AppGenre(db.Model):
     """Genre table that connects to parent table app, through foreign key
-    steam_appid. Index named idx_genre created just to sift through all genres."""
+    appid. Index named idx_genre created just to sift through all genres."""
     __tablename__ = "app_genres"
-    steam_appid = db.Column(Integer, ForeignKey("apps.steam_appid", ondelete="CASCADE"), primary_key=True)
+    appid = db.Column(Integer, ForeignKey("apps.appid", ondelete="CASCADE"), primary_key=True)
     genre = db.Column(String, primary_key=True)
     app = db.relationship("App", back_populates="genres")
     __table_args__ = (Index("idx_genre", "genre"),)
 
 class AppCategory(db.Model):
     """Category table that connects to parent table app, through foreign key
-    steam_appid. Index named idx_categpry created just to sift through all cats."""
+    appid. Index named idx_categpry created just to sift through all cats."""
     __tablename__ = "app_categories"
-    steam_appid = db.Column(Integer, ForeignKey("apps.steam_appid", ondelete="CASCADE"), primary_key=True)
+    appid = db.Column(Integer, ForeignKey("apps.appid", ondelete="CASCADE"), primary_key=True)
     category = db.Column(String, primary_key=True)
     app = db.relationship("App", back_populates="categories")
     __table_args__ = (Index("idx_category", "category"),)
@@ -78,7 +78,7 @@ class OwnedGame(db.Model):
     suggest games based off their preferences that favors their recent preferences more so."""
     __tablename__ = "owned_games"
     user_id = db.Column(Integer, primary_key=True)
-    steam_appid = db.Column(Integer, ForeignKey("apps.steam_appid", ondelete="CASCADE"), primary_key=True)
+    appid = db.Column(Integer, ForeignKey("apps.appid", ondelete="CASCADE"), primary_key=True)
     playtime_forever = db.Column(Integer, default=0)     
     rtime_last_played = db.Column(BigInteger) 
     __table_args__ = (Index("idx_owned_user", "user_id"),)
