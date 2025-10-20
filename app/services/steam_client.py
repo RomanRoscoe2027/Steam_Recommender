@@ -75,3 +75,4 @@ class SteamClient:
         return body.get("games", []) or [], int(body.get("game_count", 0) or 0)
     #will return tuple of games, and game count, defaulting to empty list and 0
     #protects against null and None
+
